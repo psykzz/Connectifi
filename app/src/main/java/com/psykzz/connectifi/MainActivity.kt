@@ -24,35 +24,34 @@ class MainActivity : AppCompatActivity() {
     private lateinit var broadCastReceiver: BroadcastReceiver
     private lateinit var connectionTester: ConnectionTester
 
-    private var CHECK_COOLDOWN = false
+    private var STATE_CHANGED_RECENTLY = false
 
     fun handleConnectionChanged(activity: AppCompatActivity) {
-        if(CHECK_COOLDOWN == true) {
-            Log.d("Connectifi", "On cooldown")
+        Log.d("Connectifi", "Handling a network event")
+        // We have a crude system to set a cool
+        if(STATE_CHANGED_RECENTLY == true) {
+            Log.d("Connectifi", "Change recently happened. Skipping...")
             return
         }
-        CHECK_COOLDOWN = true
-        Timer("Resetting the cooldown", true)
+        STATE_CHANGED_RECENTLY = true
+        Timer("Resetting STATE_CHANGED_RECENTLY", true)
             .schedule(3000) {
-                CHECK_COOLDOWN = false
-                Log.d("Connectifi", "Timer reset")
+                STATE_CHANGED_RECENTLY = false
+                Log.d("Connectifi", "STATE_CHANGED_RECENTLY reset")
             }
 
-        Log.d("Connectifi", "Something happened?!")
+
         if(connectionTester.isConnected(activity)) {
-            Log.d("Connectifi", "Found a valid connection to the internet")
+            Log.d("Connectifi", "Found a valid connection to the internet. No further action required")
             return
         }
 
         var webView: WebView = findViewById(R.id.webview)
         val wsu = WebSiteUtils(webView, "https://psykzz.com")
         // TODO: Try to press all the buttons in the wsu
-
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
+    fun registerHandlers() {
         var self = this
 
         val action = WifiManager.NETWORK_STATE_CHANGED_ACTION
@@ -64,13 +63,26 @@ class MainActivity : AppCompatActivity() {
             }
         }
         registerReceiver(
-                broadCastReceiver,
-                IntentFilter(action)
-            )
+            broadCastReceiver,
+            IntentFilter(action)
+        )
 
+        // Set this up to be used later for testing our connections
         connectionTester = ConnectionTester()
+    }
 
+    fun setPolicies() {
+        if (android.os.Build.VERSION.SDK_INT > 9) {
+            val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
+            StrictMode.setThreadPolicy(policy)
+        }
+    }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Register for the network change events
+        registerHandlers()
 
         setContentView(R.layout.activity_main)
         val navView: BottomNavigationView = findViewById(R.id.nav_view)
@@ -87,10 +99,10 @@ class MainActivity : AppCompatActivity() {
         setupActionBarWithNavController(navController, appBarConfiguration)
         navView.setupWithNavController(navController)
 
-        if (android.os.Build.VERSION.SDK_INT > 9) {
-            val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
-            StrictMode.setThreadPolicy(policy)
-        }
+        // This allows us to be bad and run main-thread network calls
+        // TODO: Remove this once we go to background network calls.
+        setPolicies()
+
     }
 
     override fun onDestroy() {
